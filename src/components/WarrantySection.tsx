@@ -1,4 +1,4 @@
-import { demoUrl } from "../demo/navigation";
+import { demoUrl, navigateDemo } from "../demo/navigation";
 import { useEffect, useState } from "react";
 import { amendWarranty, approveWarranty, cancelWarranty, fetchWarranty, fetchWarrantyCase, fetchWarrantyReceipt,
   finalizeWarranty, openWarranty, reserveWarranty, type WarrantyCase, type WarrantyList, type WarrantyReceipt } from "../api/warranty";
@@ -53,7 +53,7 @@ export function WarrantySection({ caseId }: { caseId?: string }) {
         <img src={products.find((p) => p.id === item.product.id)?.image} alt="" />
         <div><small>Sifariş #{item.orderNumber}</small><h3>{item.product.name}</h3><a href={demoUrl(`/products/${item.product.id}`)}>Modelə bax ↗</a></div>
         {item.canOpen && <button className="button button--primary" disabled={busy} onClick={() => void action(async () => {
-          const opened = await openWarranty(item.id, item.product.id); window.location.assign(opened.supportUrl);
+          const opened = await openWarranty(item.id, item.product.id); navigateDemo(opened.supportUrl);
         }, "Müraciət açıldı.")}>Müraciət aç</button>}
       </article>)}</div>
       <div className="warranty-case-list">{list.cases.map((item) => <a key={item.id} href={item.supportUrl}>

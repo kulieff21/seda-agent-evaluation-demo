@@ -1,5 +1,5 @@
 import { readState, resetDemo } from "./demo/store";
-import { demoUrl, storePathname } from "./demo/navigation";
+import { basePath, demoUrl, navigateDemo, storePathname } from "./demo/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   changePassword,
@@ -291,8 +291,20 @@ export default function App() {
 
   useEffect(() => {
     const updateRoute = () => setRoute(readStoreRoute());
+    const followInternalLink = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!link || link.hasAttribute("download") || link.target || link.origin !== window.location.origin || !link.pathname.startsWith(basePath) || link.pathname === window.location.pathname) return;
+      event.preventDefault();
+      navigateDemo(link.href);
+      if (link.hash) requestAnimationFrame(() => document.getElementById(link.hash.slice(1))?.scrollIntoView());
+    };
     window.addEventListener("popstate", updateRoute);
-    return () => window.removeEventListener("popstate", updateRoute);
+    document.addEventListener("click", followInternalLink);
+    return () => {
+      window.removeEventListener("popstate", updateRoute);
+      document.removeEventListener("click", followInternalLink);
+    };
   }, []);
 
   useEffect(() => {

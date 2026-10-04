@@ -9,6 +9,12 @@ export function storePathname(): string {
   return pathname.startsWith(basePath) ? `/${pathname.slice(basePath.length)}` : pathname;
 }
 
+export function navigateDemo(url: string): void {
+  window.history.pushState({}, "", url);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
 export function restoreStaticRoute(): void {
   const parameters = new URLSearchParams(window.location.search);
   const route = parameters.get("demo-route");

@@ -2,6 +2,7 @@ import { demoUrl } from "../demo/navigation";
 import type { AccountUser } from "../api/account";
 import type { Product } from "../data/products";
 import { formatPrice } from "../data/products";
+import { waveform } from "./Icon";
 import { ReviewsSection } from "./ReviewsSection";
 
 type ProductLinkHandler = (event: React.MouseEvent<HTMLAnchorElement>, product: Product) => void;
@@ -10,7 +11,7 @@ type ProductDetailPageProps = {
   accountUser: AccountUser | null;
   product: Product;
   relatedProducts: Product[];
-  onAddToCart: (product: Product) => void;
+  onAddToCart: (product: Product, origin?: Element | null) => void;
   onNavigateHome: (event: React.MouseEvent<HTMLAnchorElement>, hash?: string) => void;
   onNavigateAccount: (event: React.MouseEvent<HTMLAnchorElement>) => void;
   onNavigateProduct: ProductLinkHandler;
@@ -39,6 +40,7 @@ export function ProductDetailPage({
   onNavigateProduct,
   onPointerMove,
 }: ProductDetailPageProps) {
+  const stockLevel = Math.min(100, Math.round((product.inventory / 32) * 100));
   return (
     <main
       id="content"
@@ -47,66 +49,69 @@ export function ProductDetailPage({
     >
       <section className="product-detail-hero">
         <div className="product-detail-topline">
-          <a href={demoUrl("/#collection")} onClick={(event) => onNavigateHome(event, "#collection")}>Kolleksiyaya qayıt</a>
-          <span>{product.group} / {product.model}</span>
+          <a href={demoUrl("/#collection")} onClick={(event) => onNavigateHome(event, "#collection")}><span aria-hidden="true">←</span> Kolleksiya</a>
+          <span>{product.group} / {product.category} / <b>{product.model}</b></span>
         </div>
 
         <div className="product-detail-grid">
+          <div className="product-detail-stage" onPointerMove={onPointerMove} data-fly>
+            <div className="product-detail-echo" aria-hidden="true"><i /><i /><i /><i /></div>
+            <div className="product-detail-photo">
+              <img src={product.image} alt={product.imageAlt} />
+              <span className="product-detail-spotlight" aria-hidden="true" />
+            </div>
+            <div className="product-stage-code"><span>SƏDA / {product.model}</span><b>{product.group}</b></div>
+            {product.badge && <span className="product-stage-badge">{product.badge}</span>}
+          </div>
+
           <div className="product-detail-copy">
-            <p className="product-detail-category">{product.category}</p>
-            <h1>{product.name}<span>{product.model}</span></h1>
+            <p className="eyebrow">{product.category}</p>
+            <h1><span className="product-detail-name">{product.name}</span><span className="product-detail-model">{product.model}</span></h1>
             <p className="product-detail-lead">{product.detail}</p>
 
             <ul className="product-detail-features">
-              {product.features.map((feature) => <li key={feature}><CheckIcon />{feature}</li>)}
+              {product.features.map((feature, index) => <li key={feature} style={{ "--i": index } as React.CSSProperties}><CheckIcon />{feature}</li>)}
             </ul>
 
             <div className="product-detail-buy">
               <div><small>Qiymət</small><strong>{formatPrice(product.price)}</strong></div>
-              <button className="button button--primary" type="button" onClick={() => onAddToCart(product)}>
+              <button className="button button--primary" type="button" onClick={(event) => onAddToCart(product, event.currentTarget.closest("main")?.querySelector(".product-detail-stage"))}>
                 Səbətə əlavə et <PlusIcon />
               </button>
             </div>
-            <p className="product-stock"><i />Stokda {product.inventory} ədəd · Bakı daxilində pulsuz çatdırılma</p>
-          </div>
-
-          <div className="product-detail-stage" onPointerMove={onPointerMove}>
-            <div className="product-detail-spotlight" aria-hidden="true" />
-            <div className="product-detail-rings" aria-hidden="true"><i /><i /><i /><i /></div>
-            <img src={product.image} alt={product.imageAlt} />
-            <span className="product-stage-hint">İşığı hərəkət etdir</span>
-            <div className="product-stage-code"><span>SƏDA / {product.model}</span><b>{product.group}</b></div>
+            <div className="product-stock">
+              <p><i />Stokda {product.inventory} ədəd</p>
+              <span className="product-stock-meter" aria-hidden="true"><b style={{ width: `${stockLevel}%` }} /></span>
+              <small>Bakı daxilində pulsuz çatdırılma · 30 gün evdə sınaq · 2 il zəmanət</small>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="product-signal-story" aria-label={`${product.name} səs yanaşması`}>
-        <div className="product-signal-copy">
-          <p>Formanın içində</p>
+        <div className="product-signal-copy" data-reveal>
+          <p className="eyebrow">Formanın içində</p>
           <h2>{product.description}</h2>
-          <p>{product.detail}</p>
         </div>
-        <div className="product-spectrum" aria-hidden="true">
-          {Array.from({ length: 44 }, (_, index) => (
-            <i
-              key={index}
-              style={{
-                "--detail-bar": index,
-                "--detail-height": `${22 + (Math.sin(index * 0.68) + 1) * 27}%`,
-              } as React.CSSProperties}
-            />
+        <div className="product-spectrum" aria-hidden="true" data-reveal>
+          {waveform(product.id, 64).map((height, index) => (
+            <i key={index} style={{ "--detail-bar": index, "--detail-height": `${height}%` } as React.CSSProperties} />
           ))}
+          <span className="product-spectrum-labels"><small>20 Hz</small><small>{product.name} {product.model}</small><small>20 kHz</small></span>
         </div>
       </section>
 
       <section className="product-decisions">
-        <div className="product-decisions-heading">
-          <p>Üç əsas xüsusiyyət</p>
-          <h2>Hər detal dinləməyə xidmət edir.</h2>
+        <div className="section-head section-head--split" data-reveal>
+          <div>
+            <p className="eyebrow">Üç əsas xüsusiyyət</p>
+            <h2>Hər detal<br /><em>dinləməyə xidmət edir.</em></h2>
+          </div>
+          <p>{product.detail}</p>
         </div>
         <div className="product-decision-grid">
           {product.features.map((feature, index) => (
-            <article key={feature}>
+            <article key={feature} data-reveal style={{ "--delay": `${index * 90}ms` } as React.CSSProperties}>
               <span>{String(index + 1).padStart(2, "0")}</span>
               <h3>{feature}</h3>
               <p>{[
@@ -127,24 +132,27 @@ export function ProductDetailPage({
       />
 
       <section className="related-products">
-        <div className="related-products-head">
-          <div><p>Kolleksiyada davam et</p><h2>Eyni səs dili,<br />başqa forma.</h2></div>
-          <a href={demoUrl("/#collection")} onClick={(event) => onNavigateHome(event, "#collection")}>Bütün kolleksiya <ArrowIcon /></a>
+        <div className="section-head section-head--split" data-reveal>
+          <div><p className="eyebrow">Kolleksiyada davam et</p><h2>Eyni səs dili,<br /><em>başqa forma.</em></h2></div>
+          <a className="line-link" href={demoUrl("/#collection")} onClick={(event) => onNavigateHome(event, "#collection")}>Bütün kolleksiya <ArrowIcon /></a>
         </div>
         <div className="related-product-grid">
-          {relatedProducts.map((related) => (
+          {relatedProducts.map((related, index) => (
             <a
               href={demoUrl(`/products/${related.id}`)}
               key={related.id}
               onClick={(event) => onNavigateProduct(event, related)}
-              style={{ "--card-accent": related.accent } as React.CSSProperties}
+              style={{ "--card-accent": related.accent, "--delay": `${index * 90}ms` } as React.CSSProperties}
+              data-fly
+              data-reveal
             >
-              <span className="related-product-image"><img src={related.image} alt={related.imageAlt} /></span>
+              <span className="related-product-image"><img src={related.image} alt={related.imageAlt} loading="lazy" /></span>
               <span className="related-product-meta">
                 <small>{related.category}</small>
                 <b>{related.name} <i>{related.model}</i></b>
                 <strong>{formatPrice(related.price)}</strong>
               </span>
+              <span className="related-product-arrow" aria-hidden="true"><ArrowIcon /></span>
             </a>
           ))}
         </div>

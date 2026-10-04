@@ -1,6 +1,7 @@
 import { readState, resetDemo } from "./demo/store";
 import { basePath, demoUrl, navigateDemo, storePathname } from "./demo/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   changePassword,
   fetchAddresses,
@@ -31,35 +32,21 @@ import {
 import { AccountPage } from "./components/AccountPage";
 import { CheckoutPage } from "./components/CheckoutPage";
 import { RecoveryPage } from "./components/RecoveryPage";
-import { SignalField } from "./components/SignalField";
+import { HomePage } from "./components/HomePage";
+import { Icon, Mark } from "./components/Icon";
+import { flyToBag, prefersReducedMotion, withViewTransition } from "./demo/motion";
 import { ProductDetailPage, ProductNotFound } from "./components/ProductDetailPage";
 import { StaffPage } from "./components/StaffPage";
 import { SupportPage } from "./components/SupportPage";
 import {
   formatPrice,
-  productGroups,
   products as localProducts,
   type Product,
-  type ProductGroup,
 } from "./data/products";
 import "./styles.css";
 
-type IconName =
-  | "arrow"
-  | "bag"
-  | "check"
-  | "close"
-  | "menu"
-  | "minus"
-  | "moon"
-  | "plus"
-  | "search"
-  | "sun"
-  | "user";
-
 type CartLine = { id: string; quantity: number };
 type Theme = "light" | "dark";
-type SortMode = "featured" | "price-asc" | "price-desc";
 type CatalogState = "loading" | "ready" | "fallback";
 type StoreRoute =
   | { page: "home" }
@@ -84,44 +71,6 @@ function readStoreRoute(): StoreRoute {
   if (warrantyMatch) return { page: "support", warrantyCaseId: warrantyMatch[1] };
   const match = storePathname().match(/^\/products\/([^/]+)\/?$/);
   return match ? { page: "product", productId: decodeURIComponent(match[1]) } : { page: "home" };
-}
-
-function Icon({ name }: { name: IconName }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    arrow: <path d="M5 12h13m-5-5 5 5-5 5" />,
-    bag: <><path d="M5 8h14l-1 12H6L5 8Z" /><path d="M9 9V6a3 3 0 0 1 6 0v3" /></>,
-    check: <path d="m5 12 4 4L19 6" />,
-    close: <><path d="m6 6 12 12" /><path d="M18 6 6 18" /></>,
-    menu: <><path d="M4 8h16" /><path d="M4 16h16" /></>,
-    minus: <path d="M5 12h14" />,
-    moon: <path d="M19 15.4A8 8 0 0 1 8.6 5a7 7 0 1 0 10.4 10.4Z" />,
-    plus: <><path d="M5 12h14" /><path d="M12 5v14" /></>,
-    search: <><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></>,
-    sun: <><circle cx="12" cy="12" r="3.5" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
-    user: <><circle cx="12" cy="8" r="3.5" /><path d="M5.5 20c.7-4 3-6 6.5-6s5.8 2 6.5 6" /></>,
-  };
-
-  return (
-    <svg className="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <g stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">
-        {paths[name]}
-      </g>
-    </svg>
-  );
-}
-
-function Mark({ compact = false }: { compact?: boolean }) {
-  return (
-    <span className={`brand-lockup${compact ? " brand-lockup--compact" : ""}`}>
-      <svg className="brand-mark" viewBox="0 0 44 44" aria-hidden="true">
-        <path d="M7 22c6.2-9.7 23.8-9.7 30 0" />
-        <path d="M11.5 27.5c4.4-6.3 16.6-6.3 21 0" />
-        <path d="M16.5 32c2.2-2.7 8.8-2.7 11 0" />
-        <circle cx="22" cy="35.2" r="2.25" />
-      </svg>
-      {!compact && <span className="brand-word">SƏDA</span>}
-    </span>
-  );
 }
 
 function initialTheme(): Theme {
@@ -150,11 +99,10 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [remoteSearchResults, setRemoteSearchResults] = useState<Product[] | null>(null);
   const [searchPending, setSearchPending] = useState(false);
-  const [catalogQuery, setCatalogQuery] = useState("");
-  const [activeGroup, setActiveGroup] = useState<ProductGroup>("Hamısı");
-  const [sortMode, setSortMode] = useState<SortMode>("featured");
   const [notice, setNotice] = useState("");
   const [checkoutRequested, setCheckoutRequested] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const heroProducts = useMemo(
     () => heroProductIds
@@ -195,21 +143,6 @@ export default function App() {
     );
   }, [products, query]);
   const searchResults = remoteSearchResults ?? localSearchResults;
-
-  const visibleProducts = useMemo(() => {
-    const term = catalogQuery.trim().toLocaleLowerCase("az");
-    const next = products.filter((product) => {
-      const groupMatches = activeGroup === "Hamısı" || product.group === activeGroup;
-      const termMatches = !term || [product.name, product.model, product.category, product.description]
-        .join(" ")
-        .toLocaleLowerCase("az")
-        .includes(term);
-      return groupMatches && termMatches;
-    });
-    if (sortMode === "price-asc") return [...next].sort((a, b) => a.price - b.price);
-    if (sortMode === "price-desc") return [...next].sort((a, b) => b.price - a.price);
-    return next;
-  }, [activeGroup, catalogQuery, products, sortMode]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -290,7 +223,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const updateRoute = () => setRoute(readStoreRoute());
+    const updateRoute = () => withViewTransition(() => setRoute(readStoreRoute()));
     const followInternalLink = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
@@ -340,19 +273,45 @@ export default function App() {
       },
       { rootMargin: "0px 0px -8% 0px", threshold: 0.05 },
     );
-    document.querySelectorAll("[data-reveal]").forEach((element) => observer.observe(element));
+    const watch = () => document.querySelectorAll("[data-reveal]:not(.is-visible)").forEach((element) => observer.observe(element));
+    watch();
+    const mutations = new MutationObserver(watch);
+    mutations.observe(document.getElementById("root") ?? document.body, { childList: true, subtree: true });
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      mutations.disconnect();
     };
   }, [route]);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    let lastY = window.scrollY;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const y = window.scrollY;
+      header.classList.toggle("is-scrolled", y > 12);
+      header.classList.toggle("is-hidden", y > 420 && y > lastY + 2);
+      if (y < lastY - 2 || y <= 420) header.classList.remove("is-hidden");
+      lastY = y;
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try { window.localStorage.setItem("seda-theme", theme); } catch { /* Theme still works for this page. */ }
     document.querySelector('meta[name="theme-color"]')?.setAttribute(
       "content",
-      theme === "dark" ? "#120f17" : "#f1eee8",
+      theme === "dark" ? "#0d0a11" : "#efebe4",
     );
   }, [theme]);
 
@@ -373,8 +332,12 @@ export default function App() {
   }, [cartOpen, menuOpen, searchOpen]);
 
   useEffect(() => {
+    if (searchOpen) requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [searchOpen]);
+
+  useEffect(() => {
     if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(""), 2200);
+    const timer = window.setTimeout(() => setNotice(""), 2400);
     return () => window.clearTimeout(timer);
   }, [notice]);
 
@@ -384,12 +347,13 @@ export default function App() {
       .catch(() => setNotice("Səbət yadda saxlanmadı"));
   };
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, origin?: Element | null) => {
     const existing = cart.find((line) => line.id === product.id);
     const next = existing
       ? cart.map((line) => line.id === product.id ? { ...line, quantity: line.quantity + 1 } : line)
       : [...cart, { id: product.id, quantity: 1 }];
     updateCart(next);
+    flyToBag(origin);
     setNotice(`${product.name} ${product.model} səbətə əlavə edildi`);
   };
 
@@ -400,69 +364,94 @@ export default function App() {
   };
 
   const moveSpot = (event: React.PointerEvent<HTMLElement>) => {
+    if (event.pointerType === "touch") return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
     event.currentTarget.style.setProperty("--spot-x", `${x}px`);
     event.currentTarget.style.setProperty("--spot-y", `${y}px`);
-    event.currentTarget.style.setProperty("--tilt-x", `${((y / bounds.height) - 0.5) * -5}deg`);
-    event.currentTarget.style.setProperty("--tilt-y", `${((x / bounds.width) - 0.5) * 6}deg`);
+    event.currentTarget.style.setProperty("--tilt-x", `${((y / bounds.height) - 0.5) * -6}deg`);
+    event.currentTarget.style.setProperty("--tilt-y", `${((x / bounds.width) - 0.5) * 8}deg`);
   };
 
-  const selectHeroProduct = (id: string) => {
-    setSelectedId(id);
+  const toggleTheme = (event: React.MouseEvent<HTMLElement>) => {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    const apply = () => {
+      document.documentElement.dataset.theme = next;
+      flushSync(() => setTheme(next));
+    };
+    const doc = document as Document & { startViewTransition?: (update: () => void) => { ready: Promise<void> } };
+    if (!doc.startViewTransition || prefersReducedMotion()) { apply(); return; }
+    const x = event.clientX || window.innerWidth - 40;
+    const y = event.clientY || 40;
+    const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+    document.documentElement.dataset.transition = "theme";
+    const transition = doc.startViewTransition(apply);
+    transition.ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        { duration: 720, easing: "cubic-bezier(.7,0,.2,1)", pseudoElement: "::view-transition-new(root)" },
+      ).finished.finally(() => { delete document.documentElement.dataset.transition; });
+    }).catch(() => { delete document.documentElement.dataset.transition; });
   };
 
-  const openProduct = (product: Product) => {
-    window.history.pushState({}, "", demoUrl(`/products/${product.id}`));
-    setRoute({ page: "product", productId: product.id });
-    setSearchOpen(false);
-    window.scrollTo({ top: 0, behavior: "instant" });
+  const go = (path: string, next: StoreRoute, after?: () => void) =>
+    withViewTransition(() => {
+      window.history.pushState({}, "", demoUrl(path));
+      setRoute(next);
+      setMenuOpen(false);
+      setSearchOpen(false);
+      setCartOpen(false);
+      window.scrollTo({ top: 0, behavior: "instant" });
+      after?.();
+    });
+
+  const openProduct = (product: Product, source?: Element | null) => {
+    const frame = source?.closest("[data-fly]");
+    const photo = frame?.querySelector<HTMLImageElement>("img.is-active") ?? frame?.querySelector<HTMLImageElement>("img") ?? null;
+    if (photo) photo.style.viewTransitionName = "product-photo";
+    const transition = go(`/products/${product.id}`, { page: "product", productId: product.id });
+    const clear = () => { if (photo) photo.style.viewTransitionName = ""; };
+    if (transition) transition.finished.finally(clear); else clear();
   };
 
   const navigateProduct = (event: React.MouseEvent<HTMLAnchorElement>, product: Product) => {
     event.preventDefault();
-    openProduct(product);
+    openProduct(product, event.currentTarget);
   };
 
   const navigateHome = (event: React.MouseEvent<HTMLAnchorElement>, hash = "") => {
     event.preventDefault();
-    window.history.pushState({}, "", demoUrl(`/${hash}`));
-    setRoute({ page: "home" });
     setMenuOpen(false);
-    requestAnimationFrame(() => {
+    if (route.page === "home") {
+      window.history.pushState({}, "", demoUrl(`/${hash}`));
       if (hash) document.querySelector(hash)?.scrollIntoView({ behavior: "smooth" });
-      else window.scrollTo({ top: 0, behavior: "instant" });
+      else window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    go(`/${hash}`, { page: "home" }, () => {
+      if (hash) document.querySelector(hash)?.scrollIntoView({ behavior: "instant" });
     });
   };
 
   const navigateAccount = (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
-    window.history.pushState({}, "", demoUrl("/account"));
-    setRoute({ page: "account" });
-    window.scrollTo({ top: 0, behavior: "instant" });
+    go("/account", { page: "account" });
   };
 
   const navigateRecovery = (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
-    window.history.pushState({}, "", demoUrl("/recover"));
-    setRoute({ page: "recover" });
-    window.scrollTo({ top: 0, behavior: "instant" });
+    go("/recover", { page: "recover" });
   };
 
   const navigateStaff = (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
-    window.history.pushState({}, "", demoUrl("/studio"));
-    setRoute({ page: "staff" });
-    window.scrollTo({ top: 0, behavior: "instant" });
+    go("/studio", { page: "staff" });
   };
 
   const navigateSupport = (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
-    window.history.pushState({}, "", demoUrl("/support"));
-    setRoute({ page: "support" });
-    setMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    go("/support", { page: "support" });
   };
 
   const navigateAccountFromCheckout = (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -471,10 +460,7 @@ export default function App() {
   };
 
   const navigateCheckout = () => {
-    window.history.pushState({}, "", demoUrl("/checkout"));
-    setRoute({ page: "checkout" });
-    setCartOpen(false);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    go("/checkout", { page: "checkout" });
   };
 
   const loginAccount = async (email: string, password: string) => {
@@ -577,35 +563,42 @@ export default function App() {
     return order;
   };
 
+  const utilityRoute = ["account", "checkout", "recover", "resetPassword", "staff", "support"].includes(route.page);
+  const navLinks: Array<[string, string, (event: React.MouseEvent<HTMLAnchorElement>) => void]> = [
+    ["Mağaza", "/#collection", (event) => navigateHome(event, "#collection")],
+    ["Səs yanaşması", "/#philosophy", (event) => navigateHome(event, "#philosophy")],
+    ["Jurnal", "/#journal", (event) => navigateHome(event, "#journal")],
+    ["Dəstək", "/support", navigateSupport],
+  ];
+
   return (
-    <div className="site-shell" style={{ "--active": ["account", "checkout", "recover", "resetPassword", "staff", "support"].includes(route.page) ? "#aaa2ff" : routeProduct?.accent ?? selected.accent } as React.CSSProperties}>
+    <div
+      className={`site-shell site-shell--${route.page}`}
+      style={{ "--active": utilityRoute ? "#9d93ff" : routeProduct?.accent ?? selected.accent } as React.CSSProperties}
+    >
       <a className="skip-link" href="#content">Məzmuna keç</a>
+      <div className="grain" aria-hidden="true" />
 
-      <div className="service-bar" aria-label="Mağaza üstünlükləri">
-        <span>Bakıda pulsuz çatdırılma</span>
-        <span>30 gün evdə sınaq</span>
-        <span>2 il zəmanət</span>
-      </div>
-
-      <header className="site-header">
+      <header className="site-header" ref={headerRef}>
         <a className="brand" href={demoUrl("/")} onClick={(event) => navigateHome(event)} aria-label="SƏDA ana səhifə"><Mark /></a>
         <nav className="desktop-nav" aria-label="Əsas naviqasiya">
-          <a href={demoUrl("/#collection")} onClick={(event) => navigateHome(event, "#collection")}>Mağaza</a>
-          <a href={demoUrl("/#philosophy")} onClick={(event) => navigateHome(event, "#philosophy")}>Səs yanaşması</a>
-          <a href={demoUrl("/#journal")} onClick={(event) => navigateHome(event, "#journal")}>Jurnal</a>
-          <a href={demoUrl("/support")} onClick={navigateSupport}>Dəstək</a>
+          {navLinks.map(([label, path, handler]) => (
+            <a key={label} href={demoUrl(path)} onClick={handler} className={path === "/support" && route.page === "support" ? "is-current" : ""}>
+              <span className="nav-roll"><span data-text={label}>{label}</span></span>
+            </a>
+          ))}
         </nav>
         <div className="header-actions">
-          <button className="header-icon theme-toggle" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={theme === "dark" ? "İşıqlı mövzuya keç" : "Qaranlıq mövzuya keç"}>
+          <button className="header-icon theme-toggle" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "İşıqlı mövzuya keç" : "Qaranlıq mövzuya keç"}>
             <span className="theme-icon theme-icon--sun"><Icon name="sun" /></span>
             <span className="theme-icon theme-icon--moon"><Icon name="moon" /></span>
           </button>
           <button className="header-icon" type="button" onClick={() => setSearchOpen(true)} aria-label="Axtar"><Icon name="search" /></button>
           <a className={`header-icon account-button${accountUser ? " is-authenticated" : ""}`} href={demoUrl("/account")} onClick={navigateAccount} aria-label="Hesab"><Icon name="user" /></a>
-          <button className="bag-button" type="button" onClick={() => setCartOpen(true)} aria-label={`Səbət, ${cartCount} məhsul`}>
+          <button className="bag-button" type="button" onClick={() => setCartOpen(true)} aria-label={`Səbət, ${cartCount} məhsul`} onAnimationEnd={(event) => event.currentTarget.classList.remove("is-receiving")}>
             <Icon name="bag" />
             <span>Səbət</span>
-            <b>{String(cartCount).padStart(2, "0")}</b>
+            <b key={cartCount}>{String(cartCount).padStart(2, "0")}</b>
           </button>
           <button className="header-icon menu-button" type="button" onClick={() => setMenuOpen(true)} aria-label="Menyunu aç"><Icon name="menu" /></button>
         </div>
@@ -672,246 +665,86 @@ export default function App() {
           />
         ) : <ProductNotFound onNavigateHome={navigateHome} />
       ) : (
-      <main id="content">
-        <section id="hero" className={`hero hero--${selected.tone}`}>
-          <SignalField accent={selected.accent} />
-          <div className="hero-grid">
-            <div className="hero-copy">
-              <p className="hero-kicker"><span /> Bakıdan şəxsi audio</p>
-              <h1>Səsi seç.<br />Məkanı dəyiş.</h1>
-              <p className="hero-intro">
-                Qulaqlıqdan otaq sisteminə qədər hər forma eyni məqsəd üçün qurulur:
-                musiqi ilə arandakı məsafəni azaltmaq.
-              </p>
-              <div className="hero-cta">
-                <a className="button button--primary" href={demoUrl(`/products/${selected.id}`)} onClick={(event) => navigateProduct(event, selected)}>
-                  {selected.name} {selected.model}-i kəşf et <Icon name="arrow" />
-                </a>
-                <a className="quiet-link" href="#collection">Bütün kolleksiya</a>
-              </div>
-              <div className="hero-proof" aria-label="Seçilmiş məhsul xüsusiyyətləri">
-                {selected.features.map((feature) => <span key={feature}><Icon name="check" />{feature}</span>)}
-              </div>
-            </div>
-
-            <div className="hero-product" onPointerMove={moveSpot} aria-live="polite">
-              <div className="hero-spotlight" aria-hidden="true" />
-              <div className="product-orbit" aria-hidden="true"><i /><i /><i /></div>
-              <img key={selected.id} src={selected.image} alt={selected.imageAlt} />
-              <div className="hero-product-meta">
-                <span>{selected.category}</span>
-                <strong>{formatPrice(selected.price)}</strong>
-              </div>
-              <span className="pointer-hint">İşığı hərəkət etdir</span>
-            </div>
-          </div>
-
-          <div className="model-switch" aria-label="Önə çıxan məhsulu seç">
-            {heroProducts.map((product, index) => (
-              <button
-                key={product.id}
-                className={product.id === selected.id ? "is-active" : ""}
-                type="button"
-                onClick={() => selectHeroProduct(product.id)}
-                aria-pressed={product.id === selected.id}
-              >
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <img src={product.image} alt="" />
-                <span className="model-name"><b>{product.name}</b><small>{product.model}</small></span>
-                <i aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="benefit-strip" aria-label="Alış üstünlükləri">
-          <article><span>01</span><div><h2>Sına, sonra qərar ver.</h2><p>30 gün ərzində evində dinlə.</p></div></article>
-          <article><span>02</span><div><h2>Otağına uyğun qurulum.</h2><p>Bakı daxilində pulsuz kalibrasiya.</p></div></article>
-          <article><span>03</span><div><h2>Sakit dəstək.</h2><p>Satışdan sonra real texniki yardım.</p></div></article>
-        </section>
-
-        <section id="collection" className="collection">
-          <div className="collection-heading" data-reveal>
-            <div><p>Kolleksiya 2026</p><h2>Səkkiz forma.<br />Bir dinləmə dili.</h2></div>
-            <p>Qulağından bütün otağa qədər eyni material və səs fəlsəfəsi.</p>
-          </div>
-
-          <div className="catalog-toolbar" data-reveal>
-            <div className="catalog-search">
-              <Icon name="search" />
-              <input value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} type="search" placeholder="Məhsul axtar" aria-label="Kataloqda məhsul axtar" />
-            </div>
-            <div className="category-filters" aria-label="Kataloqu kateqoriyaya görə süz">
-              {productGroups.map((group) => (
-                <button key={group} className={activeGroup === group ? "is-active" : ""} type="button" onClick={() => setActiveGroup(group)} aria-pressed={activeGroup === group}>
-                  {group}
-                </button>
-              ))}
-            </div>
-            <label className="sort-control">
-              <span>Sıra</span>
-              <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
-                <option value="featured">Seçilmiş</option>
-                <option value="price-asc">Qiymət: aşağıdan</option>
-                <option value="price-desc">Qiymət: yuxarıdan</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="catalog-meta">
-            <p><strong>{visibleProducts.length}</strong> məhsul</p>
-            <span className={`catalog-sync catalog-sync--${catalogState}`} role="status">
-              <i />
-              {catalogState === "loading" ? "Kolleksiya yenilənir" : catalogState === "ready" ? "Canlı stok" : "Lokal kataloq"}
-            </span>
-            {(activeGroup !== "Hamısı" || catalogQuery) && (
-              <button type="button" onClick={() => { setActiveGroup("Hamısı"); setCatalogQuery(""); }}>Süzgəci sıfırla</button>
-            )}
-          </div>
-
-          <div className="product-grid">
-            {visibleProducts.map((product) => (
-              <article className="product-card" key={product.id} style={{ "--card-accent": product.accent } as React.CSSProperties}>
-                <a className="product-visual" href={demoUrl(`/products/${product.id}`)} onPointerMove={moveSpot} onClick={(event) => navigateProduct(event, product)} aria-label={`${product.name} ${product.model} məhsuluna bax`}>
-                  <span className="card-spotlight" aria-hidden="true" />
-                  {product.badge && <span className="product-badge">{product.badge}</span>}
-                  <img src={product.image} alt={product.imageAlt} />
-                  <span className="view-label">Yaxından bax <Icon name="arrow" /></span>
-                </a>
-                <div className="product-info">
-                  <div className="product-title">
-                    <p>{product.category}</p>
-                    <h3>{product.name} <span>{product.model}</span></h3>
-                  </div>
-                  <p className="product-description">{product.description}</p>
-                  <div className="product-buy">
-                    <strong>{formatPrice(product.price)}</strong>
-                    <button type="button" onClick={() => addToCart(product)} aria-label={`${product.name} məhsulunu səbətə əlavə et`}><Icon name="plus" /></button>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-          {!visibleProducts.length && (
-            <div className="catalog-empty">
-              <Mark compact />
-              <h3>Bu səs hələ kolleksiyada yoxdur.</h3>
-              <p>Axtarış sözünü dəyiş və ya bütün kateqoriyalara qayıt.</p>
-              <button className="button button--primary" type="button" onClick={() => { setActiveGroup("Hamısı"); setCatalogQuery(""); }}>Bütün məhsullar</button>
-            </div>
-          )}
-        </section>
-
-        <section className="statement" id="philosophy">
-          <div className="statement-copy" data-reveal>
-            <p>SƏDA yanaşması</p>
-            <h2>Yaxşı səs daha yüksək səs deyil. Qulaqla musiqi arasında qalan hər şeyi azaltmaqdır.</h2>
-          </div>
-          <div className="material-notes" data-reveal>
-            <div><span>01 / Toxuma</span><p>Dəri ilə təmasda nəfəs alır və uzun dinləmədə istiliyi azaldır.</p></div>
-            <div><span>02 / Metal</span><p>Formanı saxlayır, vibrasiyanı idarə edir və sakit toxunuş verir.</p></div>
-            <div><span>03 / İşıq</span><p>Yalnız vəziyyəti göstərir; diqqəti musiqidən almır.</p></div>
-          </div>
-        </section>
-
-        <section className="architecture" aria-labelledby="architecture-title">
-          <div className="architecture-copy" data-reveal>
-            <p>Dinləmə arxitekturası</p>
-            <h2 id="architecture-title">Sakitlik də məhsulun bir hissəsidir.</h2>
-            <p>Mikrofonlar yalnız səs-küyü ölçmür. Hər model qulağın və otağın cavabını oxuyur, sonra musiqiyə lazım olan yeri saxlayır.</p>
-            <a href="#journal" className="line-link">Necə işlədiyini oxu <Icon name="arrow" /></a>
-          </div>
-          <div className="frequency-stage" data-reveal onPointerMove={moveSpot}>
-            <div className="frequency-labels"><span>20 Hz</span><span>İnsan səsi</span><span>20 kHz</span></div>
-            <div className="frequency-bars" aria-hidden="true">
-              {Array.from({ length: 54 }, (_, index) => (
-                <i key={index} style={{ "--bar": index, "--bar-height": `${18 + (Math.sin(index * 0.73) + 1) * 25}%` } as React.CSSProperties} />
-              ))}
-            </div>
-            <div className="frequency-cursor" aria-hidden="true" />
-            <p>Spektri hərəkət etdir</p>
-          </div>
-        </section>
-
-        <section id="journal" className="journal">
-          <div className="journal-title" data-reveal><p>SƏDA jurnal</p><h2>Dinləmək üçün qeydlər</h2></div>
-          <div className="journal-list">
-            {[
-              ["07 dəq", "Sakit otaq həmişə yaxşı otaq deyil", "Akustika"],
-              ["05 dəq", "Qulaqlıqda rahatlıq necə ölçülür?", "Material"],
-              ["09 dəq", "Gündəlik dinləmədə spatial audio", "Texnologiya"],
-            ].map(([time, title, category], index) => (
-              <a href="#journal" className="journal-row" key={title} data-reveal>
-                <span>0{index + 1}</span><p>{category}</p><h3>{title}</h3><small>{time}</small><Icon name="arrow" />
-              </a>
-            ))}
-          </div>
-        </section>
-
-        <section className="final-cta" data-reveal onPointerMove={moveSpot}>
-          <div className="final-cta-glow" aria-hidden="true" />
-          <div className="final-cta-orbit" aria-hidden="true"><i /><i /><i /></div>
-          <div className="final-cta-spectrum" aria-hidden="true">
-            {Array.from({ length: 52 }, (_, index) => (
-              <i
-                key={index}
-                style={{
-                  "--cta-bar": index,
-                  "--cta-height": `${18 + (Math.sin(index * 0.62) + 1) * 30}%`,
-                } as React.CSSProperties}
-              />
-            ))}
-          </div>
-          <div className="final-cta-copy">
-            <p><span />30 gün evdə sınaq</p>
-            <h2><span>Səsi seç.</span><span>Qalanını azalt.</span></h2>
-            <a className="button button--inverse" href="#collection">Kolleksiyaya bax <Icon name="arrow" /></a>
-          </div>
-          <div className="final-cta-status" aria-hidden="true">
-            <span>08 forma</span><i /><span>Bir səs dili</span><i /><span>İmleclə dinlə</span>
-          </div>
-        </section>
-      </main>
+        <HomePage
+          products={products}
+          heroProducts={heroProducts}
+          selected={selected}
+          catalogState={catalogState}
+          onSelectHero={setSelectedId}
+          onAddToCart={addToCart}
+          onNavigateProduct={navigateProduct}
+          onPointerMove={moveSpot}
+        />
       )}
 
       <footer className="site-footer">
         <div className="footer-top">
-          <Mark />
-          <p>Şəxsi audio üçün sakit formalar.<br />Bakı, Azərbaycan.</p>
-          <div className="footer-links"><a href={demoUrl("/#collection")} onClick={(event) => navigateHome(event, "#collection")}>Məhsullar</a><a href={demoUrl("/#journal")} onClick={(event) => navigateHome(event, "#journal")}>Jurnal</a><a href={demoUrl("/support")} onClick={navigateSupport}>Dəstək</a><a href="#stores">Mağazalar</a></div>
+          <div className="footer-brand">
+            <Mark />
+            <p>Şəxsi audio üçün sakit formalar.<br />Bakı, Azərbaycan.</p>
+          </div>
+          <nav className="footer-links" aria-label="Alt naviqasiya">
+            <div>
+              <small>Mağaza</small>
+              <a href={demoUrl("/#collection")} onClick={(event) => navigateHome(event, "#collection")}>Məhsullar</a>
+              <a href={demoUrl("/#philosophy")} onClick={(event) => navigateHome(event, "#philosophy")}>Səs yanaşması</a>
+              <a href={demoUrl("/#journal")} onClick={(event) => navigateHome(event, "#journal")}>Jurnal</a>
+            </div>
+            <div>
+              <small>Xidmət</small>
+              <a href={demoUrl("/support")} onClick={navigateSupport}>Dəstək</a>
+              <a href={demoUrl("/account")} onClick={navigateAccount}>Hesab</a>
+              <a href="#stores">Mağazalar</a>
+            </div>
+          </nav>
         </div>
-        <div className="footer-bottom"><span>© 2026 SƏDA</span><span>Təhsil üçün demo · real sifariş yoxdur</span><button type="button" onClick={() => { resetDemo(); window.location.assign(demoUrl("/")); }}>Demonu sıfırla</button><button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>Yuxarı</button></div>
+        <p className="footer-wordmark" aria-hidden="true">
+          {[..."SƏDA"].map((letter, index) => <span key={index} style={{ "--i": index } as React.CSSProperties}>{letter}</span>)}
+        </p>
+        <div className="footer-bottom">
+          <span>© 2026 SƏDA</span>
+          <span>Təhsil üçün demo · real sifariş yoxdur</span>
+          <button type="button" onClick={() => { resetDemo(); window.location.assign(demoUrl("/")); }}>Demonu sıfırla</button>
+          <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>Yuxarı ↑</button>
+        </div>
       </footer>
 
-      <div className={`mobile-menu ${menuOpen ? "is-open" : ""}`} aria-hidden={!menuOpen}>
-        <button className="overlay-close" type="button" onClick={() => setMenuOpen(false)} aria-label="Menyunu bağla"><Icon name="close" /></button>
-        <Mark />
+      <div className={`mobile-menu ${menuOpen ? "is-open" : ""}`} aria-hidden={!menuOpen} inert={!menuOpen}>
+        <div className="mobile-menu-head">
+          <Mark />
+          <button className="overlay-close" type="button" onClick={() => setMenuOpen(false)} aria-label="Menyunu bağla"><Icon name="close" /></button>
+        </div>
         <nav aria-label="Mobil naviqasiya">
-          <a href={demoUrl("/#collection")} onClick={(event) => navigateHome(event, "#collection")}>Mağaza <span>01</span></a>
-          <a href={demoUrl("/#philosophy")} onClick={(event) => navigateHome(event, "#philosophy")}>Səs yanaşması <span>02</span></a>
-          <a href={demoUrl("/#journal")} onClick={(event) => navigateHome(event, "#journal")}>Jurnal <span>03</span></a>
-          <a href={demoUrl("/support")} onClick={navigateSupport}>Dəstək <span>04</span></a>
+          {navLinks.map(([label, path, handler], index) => (
+            <a key={label} href={demoUrl(path)} onClick={handler} style={{ "--i": index } as React.CSSProperties}>
+              <span>{String(index + 1).padStart(2, "0")}</span>{label}
+            </a>
+          ))}
         </nav>
-        <button className="mobile-theme" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-          <Icon name={theme === "dark" ? "sun" : "moon"} /> {theme === "dark" ? "İşıqlı mövzu" : "Qaranlıq mövzu"}
-        </button>
+        <div className="mobile-menu-foot">
+          <button className="mobile-theme" type="button" onClick={toggleTheme}>
+            <Icon name={theme === "dark" ? "sun" : "moon"} /> {theme === "dark" ? "İşıqlı mövzu" : "Qaranlıq mövzu"}
+          </button>
+          <a href={demoUrl("/account")} onClick={(event) => { setMenuOpen(false); navigateAccount(event); }}><Icon name="user" /> Hesab</a>
+        </div>
       </div>
 
-      <div className={`search-overlay ${searchOpen ? "is-open" : ""}`} aria-hidden={!searchOpen}>
-        <button className="overlay-scrim" type="button" onClick={() => setSearchOpen(false)} aria-label="Axtarışı bağla" />
+      <div className={`search-overlay ${searchOpen ? "is-open" : ""}`} aria-hidden={!searchOpen} inert={!searchOpen}>
+        <button className="overlay-scrim" type="button" onClick={() => setSearchOpen(false)} aria-label="Axtarışı bağla" tabIndex={-1} />
         <div className="search-panel" role="dialog" aria-modal="true" aria-label="Məhsul axtarışı">
           <div className="search-input-wrap">
             <Icon name="search" />
-            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Məhsul və ya kateqoriya axtar" maxLength={80} autoFocus={searchOpen} />
+            <input ref={searchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Məhsul və ya kateqoriya axtar" maxLength={80} />
             <button type="button" onClick={() => setSearchOpen(false)} aria-label="Bağla"><Icon name="close" /></button>
           </div>
-          <p className="result-count">{searchPending ? "Axtarılır" : `${searchResults.length} nəticə`}</p>
+          <p className="result-count">{searchPending ? "Axtarılır…" : `${searchResults.length} nəticə`}</p>
           <div className="search-results">
-            {searchResults.map((product) => (
-              <button key={product.id} type="button" onClick={() => openProduct(product)}>
+            {searchResults.map((product, index) => (
+              <button key={product.id} type="button" onClick={(event) => openProduct(product, event.currentTarget)} data-fly style={{ "--i": index, "--card-accent": product.accent } as React.CSSProperties}>
                 <img src={product.image} alt="" />
                 <span><small>{product.category}</small><b>{product.name} {product.model}</b></span>
                 <strong>{formatPrice(product.price)}</strong>
+                <Icon name="arrow" />
               </button>
             ))}
             {!searchResults.length && <p className="empty-state">Bu sözə uyğun məhsul tapılmadı. Model adını yoxla.</p>}
@@ -919,8 +752,8 @@ export default function App() {
         </div>
       </div>
 
-      <aside className={`cart-drawer ${cartOpen ? "is-open" : ""}`} aria-hidden={!cartOpen} aria-label="Səbət">
-        <button className="cart-scrim" type="button" onClick={() => setCartOpen(false)} aria-label="Səbəti bağla" />
+      <aside className={`cart-drawer ${cartOpen ? "is-open" : ""}`} aria-hidden={!cartOpen} inert={!cartOpen} aria-label="Səbət">
+        <button className="cart-scrim" type="button" onClick={() => setCartOpen(false)} aria-label="Səbəti bağla" tabIndex={-1} />
         <div className="cart-panel">
           <div className="drawer-head">
             <div><p>Sənin seçimin</p><h2>Səbət <span>{cartCount}</span></h2></div>
@@ -930,19 +763,20 @@ export default function App() {
             {!cart.length && (
               <div className="cart-empty">
                 <Mark compact /><h3>Hələ sakitdir.</h3><p>Dinləməyə başlamaq üçün kolleksiyadan bir forma seç.</p>
-                <button className="button button--primary" type="button" onClick={() => { setCartOpen(false); document.querySelector("#collection")?.scrollIntoView({ behavior: "smooth" }); }}>Kolleksiyaya bax</button>
+                <button className="button button--primary" type="button" onClick={() => { setCartOpen(false); if (route.page === "home") document.querySelector("#collection")?.scrollIntoView({ behavior: "smooth" }); else go("/#collection", { page: "home" }, () => document.querySelector("#collection")?.scrollIntoView({ behavior: "instant" })); }}>Kolleksiyaya bax</button>
               </div>
             )}
-            {cart.map((line) => {
-              const product = products.find((item) => item.id === line.id)!;
+            {cart.map((line, index) => {
+              const product = products.find((item) => item.id === line.id);
+              if (!product) return null;
               return (
-                <div className="cart-line" key={line.id}>
+                <div className="cart-line" key={line.id} style={{ "--i": index, "--card-accent": product.accent } as React.CSSProperties}>
                   <div className="cart-thumb"><img src={product.image} alt="" /></div>
                   <div className="cart-line-info">
                     <p>{product.category}</p><h3>{product.name} {product.model}</h3><strong>{formatPrice(product.price)}</strong>
                     <div className="quantity-control" aria-label="Miqdar">
                       <button type="button" onClick={() => changeQuantity(product.id, -1)} aria-label="Bir ədəd azalt"><Icon name="minus" /></button>
-                      <span>{line.quantity}</span>
+                      <span key={line.quantity}>{line.quantity}</span>
                       <button type="button" onClick={() => changeQuantity(product.id, 1)} aria-label="Bir ədəd artır"><Icon name="plus" /></button>
                     </div>
                   </div>

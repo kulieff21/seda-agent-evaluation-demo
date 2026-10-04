@@ -2,6 +2,10 @@ import { useEffect, useRef } from "react";
 
 type SignalFieldProps = {
   accent: string;
+  /** Horizontal origin of the echo, as a fraction of the canvas width. */
+  originX?: number;
+  /** Vertical origin of the echo, as a fraction of the canvas height. */
+  originY?: number;
 };
 
 const hexToRgb = (hex: string) => {
@@ -13,109 +17,134 @@ const hexToRgb = (hex: string) => {
   };
 };
 
-export function SignalField({ accent }: SignalFieldProps) {
+/**
+ * Echo field: wavefronts leave a source point, travel outward and fade,
+ * the way a single sound reflects through a room. The source follows the pointer.
+ */
+export function SignalField({ accent, originX = 0.5, originY = 0.5 }: SignalFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pointerRef = useRef({ x: 0.64, y: 0.47, active: false });
+  const pointerRef = useRef({ x: originX, y: originY, active: false });
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const context = canvas.getContext("2d");
     if (!context) return;
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     const rgb = hexToRgb(accent);
+    const source = { x: originX, y: originY };
     let width = 0;
     let height = 0;
-    let frame = 0;
     let animationFrame = 0;
+    let visible = true;
+    let last = performance.now();
+    let elapsed = 0;
 
     const resize = () => {
       const bounds = canvas.getBoundingClientRect();
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       width = bounds.width;
       height = bounds.height;
-      canvas.width = Math.round(width * ratio);
-      canvas.height = Math.round(height * ratio);
+      canvas.width = Math.max(1, Math.round(width * ratio));
+      canvas.height = Math.max(1, Math.round(height * ratio));
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
     };
 
-    const draw = () => {
-      context.clearRect(0, 0, width, height);
+    const paint = () => {
       const pointer = pointerRef.current;
-      const centerX = width * (pointer.active ? pointer.x : 0.67);
-      const centerY = height * (pointer.active ? pointer.y : 0.48);
-      const time = reduced.matches ? 0 : frame * 0.007;
-      const radius = Math.min(width, height) * 0.13;
+      const targetX = pointer.active ? pointer.x : originX;
+      const targetY = pointer.active ? pointer.y : originY;
+      source.x += (targetX - source.x) * 0.06;
+      source.y += (targetY - source.y) * 0.06;
 
-      const glow = context.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius * 3.4);
-      glow.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .16)`);
-      glow.addColorStop(0.42, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .055)`);
+      context.clearRect(0, 0, width, height);
+      const cx = width * source.x;
+      const cy = height * source.y;
+      const reach = Math.hypot(Math.max(cx, width - cx), Math.max(cy, height - cy));
+
+      const glow = context.createRadialGradient(cx, cy, 0, cx, cy, reach * 0.55);
+      glow.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .2)`);
+      glow.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .05)`);
       glow.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
       context.fillStyle = glow;
       context.fillRect(0, 0, width, height);
 
-      for (let ring = 0; ring < 7; ring += 1) {
-        const wave = Math.sin(time * 1.6 + ring * 0.9) * radius * 0.04;
-        const ringRadius = radius * (0.9 + ring * 0.58) + wave;
+      const period = 2600;
+      const count = 6;
+      for (let index = 0; index < count; index += 1) {
+        const phase = ((elapsed / period) + index / count) % 1;
+        const radius = 24 + phase * reach;
+        const alpha = Math.pow(1 - phase, 1.6) * 0.42;
         context.beginPath();
-        context.ellipse(centerX, centerY, ringRadius * 1.2, ringRadius, -0.12, 0, Math.PI * 2);
-        context.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.17 - ring * 0.018})`;
-        context.lineWidth = ring === 0 ? 1.4 : 0.8;
+        context.ellipse(cx, cy, radius * 1.08, radius, -0.08, 0, Math.PI * 2);
+        context.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+        context.lineWidth = 1 + (1 - phase) * 0.8;
         context.stroke();
       }
 
       context.beginPath();
-      const lineY = height * 0.79;
-      const step = Math.max(5, width / 180);
-      context.moveTo(0, lineY);
-      for (let x = 0; x <= width; x += step) {
-        const distance = Math.abs(x - centerX) / width;
-        const envelope = Math.max(0, 1 - distance * 3.3);
-        const y = lineY + Math.sin(x * 0.047 + time * 6) * envelope * 14;
-        context.lineTo(x, y);
-      }
-      context.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .38)`;
-      context.lineWidth = 1;
-      context.stroke();
-
-      frame += 1;
-      if (!reduced.matches) animationFrame = window.requestAnimationFrame(draw);
+      context.arc(cx, cy, 3.5, 0, Math.PI * 2);
+      context.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .9)`;
+      context.fill();
     };
 
-    const observer = new ResizeObserver(() => {
+    const draw = (now: number) => {
+      elapsed += Math.min(64, now - last);
+      last = now;
+      paint();
+      if (visible) animationFrame = window.requestAnimationFrame(draw);
+    };
+
+    const start = () => {
+      window.cancelAnimationFrame(animationFrame);
+      if (reduced.matches) { paint(); return; }
+      last = performance.now();
+      animationFrame = window.requestAnimationFrame(draw);
+    };
+
+    // Resizing clears the bitmap, so repaint the current frame straight away.
+    const resizeObserver = new ResizeObserver(() => {
       resize();
-      if (reduced.matches) draw();
+      paint();
     });
-    observer.observe(canvas);
+    const visibility = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      if (visible) start();
+    });
+    resizeObserver.observe(canvas);
+    visibility.observe(canvas);
     resize();
-    draw();
+    if (reduced.matches) elapsed = 900;
+    start();
 
     return () => {
-      observer.disconnect();
+      resizeObserver.disconnect();
+      visibility.disconnect();
       window.cancelAnimationFrame(animationFrame);
     };
-  }, [accent]);
+  }, [accent, originX, originY]);
 
-  const updatePointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    pointerRef.current = {
-      x: (event.clientX - bounds.left) / bounds.width,
-      y: (event.clientY - bounds.top) / bounds.height,
-      active: true,
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const host = canvas?.parentElement;
+    if (!canvas || !host) return;
+    const move = (event: PointerEvent) => {
+      const bounds = canvas.getBoundingClientRect();
+      pointerRef.current = {
+        x: (event.clientX - bounds.left) / bounds.width,
+        y: (event.clientY - bounds.top) / bounds.height,
+        active: true,
+      };
     };
-  };
+    const leave = () => { pointerRef.current.active = false; };
+    host.addEventListener("pointermove", move);
+    host.addEventListener("pointerleave", leave);
+    return () => {
+      host.removeEventListener("pointermove", move);
+      host.removeEventListener("pointerleave", leave);
+    };
+  }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="signal-field"
-      aria-hidden="true"
-      onPointerMove={updatePointer}
-      onPointerLeave={() => {
-        pointerRef.current.active = false;
-      }}
-    />
-  );
+  return <canvas ref={canvasRef} className="signal-field" aria-hidden="true" />;
 }

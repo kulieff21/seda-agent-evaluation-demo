@@ -3,8 +3,9 @@
 [Open the live demo](https://kulieff21.github.io/seda-agent-evaluation-demo/)
 
 A static, sanitized replica of the SƏDA audio-store interface for presentations.
-It reuses the original layout, typography, product images, themes, responsive styles
-and animations. It is **not the application used in the private evaluation**.
+It keeps the original products, product photography and store flows, presented in a
+redesigned "listening room" visual system (light and dark themes, motion that respects
+`prefers-reduced-motion`). It is **not the application used in the private evaluation**.
 
 There is no backend, database, authentication service, payment processing or email delivery.
 All products, people, addresses and orders are fictional. Account and commerce actions
@@ -13,7 +14,10 @@ their values are never stored or transmitted. Use fictional data only.
 
 ## Presenting
 
-- Browse the eight-product collection, change the hero model, switch themes, search and filter.
+- The hero plays the four featured models like tracks; hover the photo to pause, or pick one.
+- Browse the eight-product collection as a tracklist: hovering a row loads it on the listening stand.
+  Search, filter and sort as before; switch themes from the header.
+- Drag the **Adaptiv sakitlik** slider to see how noise cancellation removes ambient noise (schematic).
 - Open a product detail page and add products to the cart.
 - Open **Hesab** and choose **Demo müştəri** to view the sample customer, orders and warranty.
 - Choose **Demo Studio** on the login screen to explore inventory, order progression and review moderation.
@@ -25,6 +29,9 @@ Product and account routes support direct links, reload and browser Back under t
 Known views have static entry points; the Pages 404 document restores dynamic warranty routes.
 After all page assets have loaded, app interactions work without a network connection.
 A new browser page still needs its initial HTML, JavaScript, styles and local media from the host.
+
+Product photos are served as WebP derivatives (same pixel size) of the PNG masters in
+`src/assets/images/`. Display type is Bricolage Grotesque, with IBM Plex Sans and Plex Mono (OFL).
 
 ## Development
 

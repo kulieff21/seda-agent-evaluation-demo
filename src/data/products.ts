@@ -1,11 +1,11 @@
-import headphonesImage from "../assets/images/seda-m1-headphones.png";
-import speakerImage from "../assets/images/seda-r1-speaker.png";
-import earbudsImage from "../assets/images/seda-i1-earbuds.png";
-import soundbarImage from "../assets/images/seda-s1-soundbar.png";
-import turntableImage from "../assets/images/seda-t1-turntable.png";
-import dacImage from "../assets/images/seda-d1-dac.png";
-import bookshelfImage from "../assets/images/seda-b1-bookshelf.png";
-import portableImage from "../assets/images/seda-p1-portable.png";
+import headphonesImage from "../assets/images/seda-m1-headphones.webp";
+import speakerImage from "../assets/images/seda-r1-speaker.webp";
+import earbudsImage from "../assets/images/seda-i1-earbuds.webp";
+import soundbarImage from "../assets/images/seda-s1-soundbar.webp";
+import turntableImage from "../assets/images/seda-t1-turntable.webp";
+import dacImage from "../assets/images/seda-d1-dac.webp";
+import bookshelfImage from "../assets/images/seda-b1-bookshelf.webp";
+import portableImage from "../assets/images/seda-p1-portable.webp";
 import {
   catalogProducts,
   productGroups,
